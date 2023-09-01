@@ -5,35 +5,42 @@ const User = require("../modals/userModal");
 const catchAsyncErrors = (fn) => (req, res, next) => {
     Promise.resolve(fn(req, res, next)).catch(next);
   };
-  exports.isAuthenticatedUser = catchAsyncErrors(async (req, res, next) => {
-    const token = req.headers.authorization; // Use the Authorization header to get the token
+
+
+  exports.authenticateToken = catchAsyncErrors(async(req, res, next)=>{
+    const token = req.headers.authorization?.split(' ')[1];
+
+    console.log(token)
+    if (!token) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
   
-    if (!token || !token.startsWith("Bearer ")) {
-      res.locals.isAuthenticated = false;
+    try {
+      const decodedToken = jwt.verify(token, secretKey);
+      req.user = decodedToken; // Attach user information to the request
+      next();
+    } catch (error) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+  })  
+  
+  
+
+  exports.isAuthenticatedUser = catchAsyncErrors(async (req, res, next) => {
+    const { token } = req.cookies;
+    console.log(token)
+    if (!token) {
       return next(new ErrorHander("Please Login to access this resource", 401));
     }
   
     try {
-      const decodedData = jwt.verify(token.split(" ")[1], process.env.JWT_SECRET_TOKEN);
-  
-      // Use async/await to get the user
-      const user = await User.findById(decodedData.id);
-  
-      if (!user) {
-        res.locals.isAuthenticated = false;
-        return next(new ErrorHander("User not found", 401));
-      }
-      
-      req.user = user; // Attach the user to the request object
-      res.locals.isAuthenticated = true; // Set isAuthenticated to true
+      const decodedData = jwt.verify(token, process.env.JWT_SECRET_TOKEN);
+      req.user = await User.findById(decodedData.id);
       next();
     } catch (error) {
-      console.error("Token Verification Error:", error);
-      res.locals.isAuthenticated = false;
       return next(new ErrorHander("Please Login to access this resource", 401));
     }
   });
-  
   
 exports.authorizeRoles = (...roles) => {
   return (req, res, next) => {

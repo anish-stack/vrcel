@@ -1,16 +1,31 @@
 const Order = require("../modals/orderModal");
 const Product = require("../modals/productModal");
 const ErrorHander = require("../utils/errorHandler");
+const sendEmail = require("../utils/mailSend")
+const user = require("../modals/userModal");
+const path = require("path")
+const PDFDocument = require('pdfkit');
+const fs = require('fs');
 //=====Catch Async error
 const catchAsyncErrors = (fn) => (req, res, next) => {
   Promise.resolve(fn(req, res, next)).catch(next);
 };
-//======Create New Order here
+
+
+
+function generateInvoiceNumber() {
+  const timestamp = Date.now().toString();
+  const random = Math.floor(Math.random() * 90000000) + 10000000; // Generate a random 8-digit number
+  return `${timestamp}_${random}`;
+}
+
 exports.newOrder = catchAsyncErrors(async (req, res, next) => {
+  const orderNumber = generateInvoiceNumber();
   const {
     shippingInfo,
     orderItems,
     paymentInfo,
+    userInfo,
     itemsPrice,
     taxPrice,
     shippingPrice,
@@ -21,20 +36,77 @@ exports.newOrder = catchAsyncErrors(async (req, res, next) => {
     shippingInfo,
     orderItems,
     paymentInfo,
+    userInfo,
     itemsPrice,
     taxPrice,
     shippingPrice,
     totalPrice,
+    invoiceNumber: orderNumber,
     paidAt: Date.now(),
   });
 
+  const invoiceName = `invoice_${order._id}.pdf`;
+  const invoicePath = path.join(__dirname, '..', 'invoices', invoiceName);
+
+  // Ensure directory exists
+  const invoiceDir = path.dirname(invoicePath);
+  if (!fs.existsSync(invoiceDir)) {
+    fs.mkdirSync(invoiceDir, { recursive: true });
+  }
+
+  const doc = new PDFDocument();
+  doc.pipe(fs.createWriteStream(invoicePath));
+
+  // Add content to the PDF
+  doc.font('Helvetica-Bold').fontSize(18).text('Invoice', { align: 'center' });
+
+  // Add order details
+  doc.font('Helvetica').fontSize(20).text(`Invoice Number: ${order.invoiceNumber}`);
+
+  doc.font('Helvetica').fontSize(12).text(`Order ID: ${order._id}`);
+  doc.text(`Order Date: ${order.paidAt.toDateString()}`);
+  doc.text(`Shipping Address: ${shippingInfo.address}, ${shippingInfo.city}, ${shippingInfo.country}`);
+  doc.moveDown();
+
+  // Add order items
+  doc.font('Helvetica-Bold').fontSize(14).text('Order Items:');
+  orderItems.forEach((item) => {
+    doc.font('Helvetica').fontSize(12).text(`${item.name} - Quantity: ${item.quantity}, Price: $${item.price}`);
+  });
+  doc.moveDown();
+  //add user info here
+  doc.font('Helvetica-Bold').fontSize(14).text('User Details:');
+  doc.font('Helvetica').fontSize(12).text(`user ID: ${userInfo.userId}`);
+  doc.text(`email: ${userInfo.UserEmail}`);
+  // Add payment details
+  doc.font('Helvetica-Bold').fontSize(14).text('Payment Details:');
+  doc.font('Helvetica').fontSize(12).text(`Payment ID: ${paymentInfo.id}`);
+  doc.text(`Payment Status: ${paymentInfo.status}`);
+  doc.moveDown();
+
+  // Add pricing details
+  doc.font('Helvetica-Bold').fontSize(14).text('Pricing Details:');
+  doc.font('Helvetica').fontSize(12).text(`Items Price: Rs${itemsPrice}`);
+  doc.text(`Tax Price: Rs${taxPrice}`);
+  doc.text(`Shipping Price: Rs${shippingPrice}`);
+  doc.text(`Total Price: Rs${totalPrice}`);
+
+  doc.end();
+
+  // Update order with invoicePath
+  order.invoicePath = invoicePath;
+  await order.save();
+
+  console.log(order)
+  // Return Response with Invoice Link
   res.status(201).json({
     success: true,
     order,
+    invoiceLink: invoicePath,
   });
 });
-
 // get singleorder Details by order id
+
 
 exports.singleorder = catchAsyncErrors(async (req, res, next) => {
   const params = req.params.id;
@@ -228,6 +300,39 @@ exports.changeStatus = catchAsyncErrors(async (req, res, next) => {
       return res.status(404).json({
         success: false,
         message: 'No orders with zero total price found',
+      });
+    }
+  });
+  exports.totalPaymentAmount = catchAsyncErrors(async (req, res) => {
+    // Find all orders with the status 'delivered'
+    const deliveredOrders = await Order.find({ status: 'delivered' });
+  
+    // Calculate the total order amount for delivered orders
+    let totalAmount = 0;
+    for (const order of deliveredOrders) {
+      totalAmount += order.totalAmount; // Assuming totalPrice is the field storing the order amount
+    }
+  
+    res.status(200).json({
+      success: true,
+      totalAmount,
+    });
+  });
+
+  
+  
+  exports.deleteAllOrdersAll = catchAsyncErrors(async (req, res) => {
+    const deletedOrders = await Order.deleteMany({});
+    
+    if (deletedOrders.deletedCount > 0) {
+      return res.status(200).json({
+        success: true,
+        message: 'All orders deleted successfully',
+      });
+    } else {
+      return res.status(404).json({
+        success: false,
+        message: 'No orders found to delete',
       });
     }
   });

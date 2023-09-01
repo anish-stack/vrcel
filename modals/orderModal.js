@@ -28,6 +28,7 @@ const orderSchema = new mongoose.Schema({
       type: Number,
   
     },
+
   
   },
   orderItems: [
@@ -55,11 +56,17 @@ const orderSchema = new mongoose.Schema({
       },
     },
   ],
-  // user: {
-  //   type: mongoose.Schema.ObjectId,
-  //   ref: "user",
-  //   required: true,
-  // },
+  userInfo:[
+    {
+    userId:{
+      type :String 
+    },
+    UserEmail:{
+      type:String
+    },
+
+  }
+  ],
 
   paymentInfo: {
     id: {
@@ -100,7 +107,9 @@ const orderSchema = new mongoose.Schema({
 
     default: "Processing",
   },
-  deliveredAt: Date,
+  invoiceNumber: String,
+  invoicePath: String,
+    deliveredAt: Date,
   createdAt: {
     type: Date,
     default: Date.now,
