@@ -109,10 +109,10 @@ app.get('/activate', async (req, res) => {
   }
 });
 
+app.get('/', (req, res) => {
+  res.send("Server running success");
+});
 
-app.get('/',(req,res)=>{
- res.send("server runing success")
-})
 // =======================
 // ////////////////////////////////////////////////==============================================
 
